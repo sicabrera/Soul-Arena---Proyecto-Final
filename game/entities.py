@@ -14,6 +14,13 @@ class Bullet:
     hostile: bool = False
 
 
+@dataclass
+class HealthPickup:
+    position: Vec
+    remaining: float = 10.0
+    radius = 10
+
+
 class Player:
     def __init__(self):
         self.position = Vec(600, 440)
@@ -21,6 +28,8 @@ class Player:
         self.max_health = 100
         self.health = 100
         self.damage = 20
+        self.projectile_speed = 650
+        self.armor = 0.0
         self.speed = 250
         self.interval = .28
         self.cooldown = 0
@@ -37,6 +46,10 @@ class Player:
             self.interval *= .75
         elif key == "move":
             self.speed *= 1.25
+        elif key == "armor":
+            self.armor = .2
+        elif key == "velocity":
+            self.projectile_speed *= 1.25
 
     def update(self, dt, keys, world=None):
         direction = Vec(int(keys[pygame.K_d]) - int(keys[pygame.K_a]),
@@ -53,22 +66,30 @@ class Player:
 
 
 class Enemy:
-    def __init__(self, position, difficulty):
+    def __init__(self, position, difficulty, *, healing=False):
         self.position = Vec(position)
+        self.healing = healing
         self.max_health = 48 + difficulty * 14
         self.health = self.max_health
         self.speed = 72 + difficulty * 10
         self.radius = 13
         self.damage = 12 + difficulty * 3
         self.cooldown = .65
-        self.interval = max(.65, 1.3 - difficulty * .12)
+        self.interval = max(.55, 1.3 - difficulty * .12)
         self.guardian_locked = False
         self.aim = Vec(0, 1)
+        self.facing = 4
+        self.walk_distance = 0.0
         self.path = None
+        self.moving = False
+        self.hurt = self.shot = 0
 
     def update(self, dt, player, guardian, world, bullets):
         """Avanza al guardián; al entrar en alcance queda fijado a él."""
         self.cooldown = max(0, self.cooldown - dt)
+        self.moving = False
+        self.hurt = max(0, self.hurt - dt)
+        self.shot = max(0, self.shot - dt)
         if (self.position.distance_to(guardian) <= 115
                 and world.visible(self.position, guardian)):
             self.guardian_locked = True
@@ -86,7 +107,11 @@ class Enemy:
         delta = waypoint - self.position
         if delta.length_squared():
             self.aim = delta.normalize()
+            previous = self.position.copy()
             world.move(self.position, self.aim * min(self.speed * dt, delta.length()), self.radius)
+            distance = self.position.distance_to(previous)
+            self.moving = distance > .01
+            self.walk_distance += distance
         # El jugador es un blanco de oportunidad: nunca cambia la ruta principal.
         if (self.position.distance_to(player.position) <= 330
                 and world.visible(self.position, player.position)):
@@ -101,3 +126,4 @@ class Enemy:
                 bullets.append(Bullet(self.position.copy(), self.aim * 320,
                                       self.damage, ttl=3, hostile=True))
                 self.cooldown = self.interval
+                self.shot = .065

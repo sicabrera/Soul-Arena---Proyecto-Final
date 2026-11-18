@@ -13,6 +13,7 @@ class SkillNode:
     left: object = None
     right: object = None
     unlocked: bool = False
+    min_level: int = 1
 
 
 class SkillTree:
@@ -20,15 +21,17 @@ class SkillTree:
         self.root = SkillNode("basic", "Disparo básico", 0, "Tu arma inicial", unlocked=True)
         damage = self.insert(self.root, "left", "damage", "Daño I", 20, "+8 de daño")
         speed = self.insert(self.root, "right", "speed", "Cadencia I", 20, "Dispara más rápido")
-        self.insert(damage, "left", "damage2", "Daño II", 35, "+12 de daño")
-        self.insert(damage, "right", "health", "Vitalidad", 30, "+40 de vida máxima")
-        self.insert(speed, "left", "speed2", "Cadencia II", 35, "Aún más disparos")
-        self.insert(speed, "right", "move", "Agilidad", 30, "+25% de movimiento")
+        self.insert(damage, "left", "damage2", "Daño II", 35, "+12 de daño", min_level=2)
+        health = self.insert(damage, "right", "health", "Vitalidad", 30, "+40 de vida máxima", min_level=2)
+        cadence = self.insert(speed, "left", "speed2", "Cadencia II", 35, "Aún más disparos", min_level=2)
+        self.insert(speed, "right", "move", "Agilidad", 30, "+25% de movimiento", min_level=2)
+        self.insert(health, "left", "armor", "Blindaje", 40, "Recibís 20% menos daño", min_level=3)
+        self.insert(cadence, "right", "velocity", "Proyectiles", 40, "+25% velocidad de bala", min_level=3)
 
-    def insert(self, parent, side, key, name, cost, description):
+    def insert(self, parent, side, key, name, cost, description, *, min_level=1):
         if side not in ("left", "right") or getattr(parent, side) is not None:
             raise ValueError("Hijo inválido u ocupado")
-        node = SkillNode(key, name, cost, description, parent=parent)
+        node = SkillNode(key, name, cost, description, parent=parent, min_level=min_level)
         setattr(parent, side, node)
         return node
 
@@ -40,10 +43,12 @@ class SkillTree:
         if node.right:
             yield from self.preorder(node.right)
 
-    def buy(self, key, souls):
+    def buy(self, key, souls, *, level=1):
         node = next((n for n in self.preorder() if n.key == key), None)
         if node is None or node.unlocked:
             return souls, False, "Habilidad ya adquirida o inexistente."
+        if level < node.min_level:
+            return souls, False, f"Requiere nivel {node.min_level}."
         if node.parent and not node.parent.unlocked:
             return souls, False, "Primero comprá la habilidad anterior."
         if souls < node.cost:

@@ -9,6 +9,15 @@ Vec = pygame.Vector2
 PLAYER_MUZZLE = [(0, -25), (12, -21), (14, -11), (12, -1), (0, 3), (-12, -2), (-15, -12), (-13, -19)]
 MINION_MUZZLE = [(0, -26), (14, -20), (16, -9), (12, 5), (0, 4), (-16, 4), (-17, -10), (-11, -19)]
 
+# La rotación de tono conserva las sombras y las luces del fondo,
+# incluido el cristal del guardián, que forma parte de la imagen.
+ARENA_PALETTES = {
+    "camp": (0, (246, 199, 94)),
+    "ruins": (43, (177, 241, 99)),
+    "crypt": (230, (204, 154, 255)),
+    "core": (156, (115, 193, 255)),
+}
+
 # Sentido horario desde el norte. El margen evita el parpadeo entre dos poses.
 def facing_for(aim, previous):
     angle = Vec(0, -1).angle_to(aim) % 360
@@ -68,7 +77,11 @@ class CharacterArt:
 
 class Art:
     def __init__(self):
-        self.arena = self.image("nightclub").convert()
+        arena = self.image("nightclub").convert()
+        self.arenas = {
+            zone: (pygame.transform.hsl(arena, hue=hue) if hue else arena, guardian_color)
+            for zone, (hue, guardian_color) in ARENA_PALETTES.items()
+        }
         self.player = CharacterArt(self.image("player-directions"), PLAYER_MUZZLE)
         self.minion = CharacterArt(self.image("minion-directions"), MINION_MUZZLE)
         self.healing_minion = CharacterArt(self.image("minion-green-directions"), MINION_MUZZLE,

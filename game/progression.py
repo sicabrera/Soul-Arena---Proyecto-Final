@@ -9,6 +9,7 @@ class SkillNode:
     name: str
     cost: int
     description: str
+    # El padre es la habilidad que se necesita antes de comprar esta.
     parent: object = None
     left: object = None
     right: object = None
@@ -18,6 +19,7 @@ class SkillNode:
 
 class SkillTree:
     def __init__(self):
+        # El disparo básico es la raíz y viene desbloqueado desde el inicio.
         self.root = SkillNode("basic", "Disparo básico", 0, "Tu arma inicial", unlocked=True)
         damage = self.insert(self.root, "left", "damage", "Daño I", 20, "+8 de daño")
         speed = self.insert(self.root, "right", "speed", "Cadencia I", 20, "Dispara más rápido")
@@ -29,6 +31,7 @@ class SkillTree:
         self.insert(cadence, "right", "velocity", "Proyectiles", 40, "+25% velocidad de bala", min_level=3)
 
     def insert(self, parent, side, key, name, cost, description, *, min_level=1):
+        # Cada habilidad admite un hijo a la izquierda y otro a la derecha.
         if side not in ("left", "right") or getattr(parent, side) is not None:
             raise ValueError("Hijo inválido u ocupado")
         node = SkillNode(key, name, cost, description, parent=parent, min_level=min_level)
@@ -36,6 +39,7 @@ class SkillTree:
         return node
 
     def preorder(self, node=None):
+        # Primero visitamos el nodo, luego la rama izquierda y al final la derecha.
         node = self.root if node is None else node
         yield node
         if node.left:
@@ -44,6 +48,7 @@ class SkillTree:
             yield from self.preorder(node.right)
 
     def buy(self, key, souls, *, level=1):
+        # Buscamos la habilidad por su clave y revisamos los requisitos antes de cobrar.
         node = next((n for n in self.preorder() if n.key == key), None)
         if node is None or node.unlocked:
             return souls, False, "Habilidad ya adquirida o inexistente."
@@ -60,31 +65,37 @@ class SkillTree:
 class ZoneGraph:
     def __init__(self):
         self.names = {"camp": "Campamento", "ruins": "Ruinas", "crypt": "Cripta", "core": "Núcleo"}
+        # Cada zona tiene una lista de rutas con su destino y costo en almas.
         self.adjacency = {key: [] for key in self.names}
         self.add_edge("camp", "ruins", 25)
         self.add_edge("camp", "crypt", 35)
         self.add_edge("ruins", "core", 50)
         self.add_edge("crypt", "core", 40)
+        # Una zona puede estar abierta aunque todavía queden oleadas por pasar.
         self.unlocked = {"camp"}
         self.completed = set()
 
     def add_edge(self, source, target, cost):
         if source not in self.adjacency or target not in self.adjacency or cost < 0:
             raise ValueError("Ruta inválida")
+        # La arista se guarda en el origen porque la ruta va en una sola dirección.
         self.adjacency[source].append((target, cost))
 
     def bfs(self, start):
+        # La cola permite visitar primero a los vecinos más cercanos en número de rutas.
         pending, visited, order = deque([start]), {start}, []
         while pending:
             current = pending.popleft()
             order.append(current)
             for neighbor, _ in self.adjacency[current]:
                 if neighbor not in visited:
+                    # Marcamos al agregar a la cola para que Núcleo entre una sola vez.
                     visited.add(neighbor)
                     pending.append(neighbor)
         return order
 
     def access(self, source, target, souls):
+        # Volver a una zona abierta es gratis. Para abrir otra, hay que pasar la actual.
         if target in self.unlocked:
             return souls, True, "Zona disponible."
         if source not in self.completed:

@@ -18,6 +18,7 @@ PINK = (245, 49, 131)
 CRITICAL_RED = (255, 67, 82)
 GUARDIAN_MAX_HEALTH = 300
 ZONE_TIERS = {"camp": 0, "ruins": 1, "crypt": 2, "core": 3}
+DEBUG_SOULS_CODE = "debugsouls"
 
 
 class Game:
@@ -46,11 +47,14 @@ class Game:
     def reset(self):
         self.player, self.tree, self.graph = Player(), SkillTree(), ZoneGraph()
         self.souls, self.kills = 0, 0
+        self.debug_input = ""
+        self.debug_invulnerable = False
         self.zone, self.scene = "camp", "intro"
         self.message, self.message_time = "", 0
         self.load_zone()
 
     def load_zone(self):
+        self.arena_background, self.guardian_color = self.art.arenas[self.zone]
         self.enemies, self.bullets = [], []
         self.guardian = Arena.art_point((835, 427))
         self.guardian_health = GUARDIAN_MAX_HEALTH
@@ -130,6 +134,17 @@ class Game:
         elif event.type == pygame.KEYDOWN:
             key = event.key
             active = self.scene in ("arena", "skills", "map", "pause")
+            char = getattr(event, "unicode", "")
+            if active and char.isprintable():
+                self.debug_input = (self.debug_input + char.lower())[-len(DEBUG_SOULS_CODE):]
+                if self.debug_input == DEBUG_SOULS_CODE:
+                    self.debug_input = ""
+                    self.souls = 9_999_999
+                    self.debug_invulnerable = True
+                    self.player.health = self.player.max_health
+                    self.guardian_health = GUARDIAN_MAX_HEALTH
+                    self.graph.unlocked.update(self.graph.names)
+                    self.notify("Modo de prueba: 9.999.999 almas, vida infinita y zonas abiertas")
             if key == pygame.K_ESCAPE and active:
                 self.scene = "pause" if self.scene == "arena" else "arena"
             elif key == pygame.K_TAB and active:
@@ -293,12 +308,14 @@ class Game:
             if hit_t is not None:
                 impact = start.lerp(end, hit_t)
                 if target == "guardian":
-                    self.guardian_health -= bullet.damage
+                    if not self.debug_invulnerable:
+                        self.guardian_health -= bullet.damage
                     self.effects.append(Effect((18, 19), impact, .075))
                 elif target is not None:
                     if target is self.player:
-                        target.health -= bullet.damage * (1 - target.armor)
-                        self.hurt = .11
+                        if not self.debug_invulnerable:
+                            target.health -= bullet.damage * (1 - target.armor)
+                            self.hurt = .11
                     else:
                         target.health -= bullet.damage
                         target.hurt = .11
@@ -313,7 +330,7 @@ class Game:
                 self.bullets.remove(bullet)
 
     def draw_arena(self):
-        self.screen.blit(self.art.arena, (0, 80))
+        self.screen.blit(self.arena_background, (0, 80))
         p = self.player
         player_health = p.health / p.max_health
         guardian_health = self.guardian_health / GUARDIAN_MAX_HEALTH
@@ -345,7 +362,7 @@ class Game:
             self.art.draw_effect(self.screen, effect)
 
         self.draw_actor_health(p.position, 30, 44, player_health, CYAN)
-        self.draw_actor_health(self.guardian, 48, 74, guardian_health, GOLD)
+        self.draw_actor_health(self.guardian, 48, 74, guardian_health, self.guardian_color)
 
         pygame.draw.rect(self.screen, PANEL, (0, 0, 1200, 80))
         pygame.draw.line(self.screen, (26, 111, 124), (0, 79), (1200, 79), 2)
@@ -357,7 +374,8 @@ class Game:
         self.bar(220, 51, 140, player_health, CYAN)
         self.art.ui_image(self.screen, 2, 1, (405, 15, 18, 26))
         self.text(f"{max(0, int(self.guardian_health))}/{GUARDIAN_MAX_HEALTH}", (435, 17))
-        self.bar(405, 51, 140, guardian_health, GOLD)
+        hud_guardian_color = CRITICAL_RED if 0 < guardian_health < .2 else self.guardian_color
+        self.bar(405, 51, 140, guardian_health, hud_guardian_color)
         self.art.ui_image(self.screen, 2, 2, (595, 13, 17, 26))
         self.text(f"Almas {self.souls}", (624, 17), CYAN)
         self.text(f"Nivel {self.level} · Bajas {self.kills}", (624, 43), MUTED, self.small)
@@ -376,6 +394,7 @@ class Game:
         positions = {"basic": (600, 169), "damage": (335, 283), "speed": (865, 283),
                      "damage2": (165, 398), "health": (435, 398), "speed2": (765, 398), "move": (1035, 398),
                      "armor": (435, 523), "velocity": (765, 523)}
+        # Cada línea conecta una mejora con la habilidad que pide antes.
         for node in self.tree.preorder():
             if node.parent:
                 pygame.draw.line(self.screen, GREEN if node.unlocked else (65, 80, 103), positions[node.parent.key], positions[node.key], 3)
@@ -394,6 +413,7 @@ class Game:
     def buy_skill(self, key):
         self.souls, bought, message = self.tree.buy(key, self.souls, level=self.level)
         if bought:
+            # Aplicamos el efecto al personaje solo después de confirmar la compra.
             self.player.apply_skill(key)
         self.notify(message)
 
@@ -409,6 +429,7 @@ class Game:
         self.text("MAPA DE ZONAS", (60, 35), CYAN, self.title)
         self.text(f"Almas: {self.souls}  ·  Completá una zona para comprar sus rutas. Repetir zonas abiertas es gratis.", (60, 92), GOLD)
         positions = {"camp": (200, 355), "ruins": (600, 230), "crypt": (600, 480), "core": (1000, 355)}
+        # Dibujamos las flechas y sus costos a partir de las rutas del grafo.
         for source, edges in self.graph.adjacency.items():
             for target, cost in edges:
                 a, b = Vec(positions[source]), Vec(positions[target])
@@ -429,7 +450,7 @@ class Game:
         self.button((930, 660, 210, 40), "Volver · M", lambda: self.set_scene("arena"), icon=(1, 3))
 
     def draw_card(self, title, subtitle, lines, label, action, icon=(1, 0)):
-        self.screen.blit(self.art.arena, (0, 80))
+        self.screen.blit(self.arena_background, (0, 80))
         if self.scene == "dead":
             self.draw_arena()
             self.buttons.clear()

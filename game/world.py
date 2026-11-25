@@ -72,12 +72,14 @@ class Arena:
             (505,884,272,40), (895,884,270,40),
         )]
         self.guardian = Vec(guardian)
+        # Los puntos libres del escenario son los nodos del grafo de movimiento.
         self.cells = {}
         for x in range(48):
             for y in range(24):
                 point = Vec(12 + x * 25, 100 + y * 25)
                 if self.is_free(point, 16):
                     self.cells[(x, y)] = point
+        # Recorremos la cuadrícula desde el guardián una vez al cargar la arena.
         goal = self.nearest_cell(self.guardian)
         self.parents, self.distance = {goal: None}, {goal: 0}
         pending = deque([goal])
@@ -87,6 +89,7 @@ class Arena:
             for neighbor in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
                 if (neighbor in self.cells and neighbor not in self.parents
                         and self.visible(self.cells[current], self.cells[neighbor], 15)):
+                    # Desde este vecino se vuelve hacia el guardián por la celda actual.
                     self.parents[neighbor] = current
                     self.distance[neighbor] = self.distance[current] + 1
                     pending.append(neighbor)
@@ -121,6 +124,7 @@ class Arena:
             return []
         cell = min(reachable, key=lambda key: self.cells[key].distance_squared_to(position))
         path = [self.cells[cell].copy()]
+        # El minion sigue los padres desde su punto de entrada hasta el guardián.
         while self.parents[cell] is not None:
             cell = self.parents[cell]
             path.append(self.cells[cell].copy())
